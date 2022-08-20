@@ -31,7 +31,7 @@ set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>" CACHE STR
 # ---- Project ----
 
 project(
-	TemplatePluginSSE
+	HomingProjectiles
 	VERSION 1.0.0
 	LANGUAGES CXX
 )
@@ -81,11 +81,13 @@ else ()
 endif ()
 
 find_package(spdlog REQUIRED CONFIG)
+find_package(jsoncpp REQUIRED CONFIG)
 
 # ---- Add source files ----
 
 set(SOURCES
 	src/main.cpp
+	src/FenixProjectilesAPI.h
 	src/PCH.h
 )
 
@@ -133,6 +135,7 @@ target_link_libraries(
 	PRIVATE
 		CommonLibSSE::CommonLibSSE
 		spdlog::spdlog
+		JsonCpp::JsonCpp
 )
 
 if (DEFINED UseUselessUtils AND UseUselessUtils)

@@ -45,11 +45,80 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Query(const SKSE::QueryInterface* a
 	return true;
 }
 
+#include "FenixProjectilesAPI.h"
+#include "json/json.h"
+
+std::vector<uint32_t> homie_spells;
+
+int get_mod_index(const std::string_view& name)
+{
+	auto esp = RE::TESDataHandler::GetSingleton()->LookupModByName(name);
+	if (!esp)
+		return -1;
+
+	return !esp->IsLight() ? esp->compileIndex << 24 : (0xFE000 | esp->smallFileCompileIndex) << 12;
+}
+
+void read_json()
+{
+	Json::Value json_root;
+	std::ifstream ifs;
+	ifs.open("Data/SKSE/Plugins/HomingProjectiles/HomieSpells.json");
+	ifs >> json_root;
+	ifs.close();
+
+	for (auto& mod_name : json_root.getMemberNames()) {
+		auto hex = get_mod_index(mod_name);
+		if (hex == -1)
+			continue;
+
+		const Json::Value mod_data = json_root[mod_name];
+		for (int i = 0; i < (int)mod_data.size(); i++) {
+			homie_spells.push_back(hex | std::stoul(mod_data[i].asString(), nullptr, 16));
+		}
+	}
+}
+
+bool is_homie(RE::FormID formid) { return std::find(homie_spells.begin(), homie_spells.end(), formid) != homie_spells.end(); }
+
+static set_type_t _set_AutoAimType;
+void set_AutoAimType(RE::Projectile* proj) { return (*_set_AutoAimType)(proj); }
+void init()
+{
+	_set_AutoAimType =
+		(set_type_t)GetProcAddress(GetModuleHandleA("FenixProjectilesAPI.dll"), "FenixProjectilesAPI_set_AutoAimType");
+
+	read_json();
+}
+
+class CoolFireballHook
+{
+public:
+	static void Hook()
+	{
+		_MissileProjectile__ctor =
+			SKSE::GetTrampoline().write_call<5>(REL::ID(42928).address() + 0x219, Ctor);  // SkyrimSE.exe+74B389
+	}
+
+private:
+	static RE::MissileProjectile* Ctor(RE::MissileProjectile* proj, void* LaunchData)
+	{
+		proj = _MissileProjectile__ctor(proj, LaunchData);
+		if (auto spell = proj->spell; spell && is_homie(spell->formID)) {
+			set_AutoAimType(proj);
+		}
+		return proj;
+	}
+
+	static inline REL::Relocation<decltype(Ctor)> _MissileProjectile__ctor;
+};
+
 static void SKSEMessageHandler(SKSE::MessagingInterface::Message* message)
 {
 	switch (message->type) {
 	case SKSE::MessagingInterface::kDataLoaded:
-		//
+		init();
+		CoolFireballHook::Hook();
 
 		break;
 	}
